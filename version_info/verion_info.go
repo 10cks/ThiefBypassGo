@@ -5,7 +5,6 @@ import (
 	"debug/pe"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"time"
@@ -156,147 +155,9 @@ func getFileDetails(filename string) (*FileInfo, error) {
 	return info, nil
 }
 
-func copyFileDetails(sourcePath, targetPath string) error {
-	// 首先读取源文件的版本信息
-	sourceInfo, err := getFileDetails(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to read source file details: %v", err)
-	}
-
-	// 打开目标文件
-	targetFile, err := os.OpenFile(targetPath, os.O_RDWR, 0666)
-	if err != nil {
-		return fmt.Errorf("failed to open target file: %v", err)
-	}
-	defer targetFile.Close()
-
-	// 读取目标文件的PE信息
-	peFile, err := pe.NewFile(targetFile)
-	if err != nil {
-		return fmt.Errorf("failed to parse target PE file: %v", err)
-	}
-
-	// 查找资源节
-	var rsrcSection *pe.Section
-	for _, section := range peFile.Sections {
-		if section.Name == ".rsrc" {
-			rsrcSection = section
-			break
-		}
-	}
-
-	if rsrcSection == nil {
-		return fmt.Errorf("no resource section found in target file")
-	}
-
-	// 读取完整的资源节数据
-	data, err := rsrcSection.Data()
-	if err != nil {
-		return fmt.Errorf("failed to read resource section: %v", err)
-	}
-
-	// 查找VERSION_INFO资源的位置
-	var versionStart int = -1
-	for i := 0; i < len(data)-8; i++ {
-		if binary.LittleEndian.Uint32(data[i:]) == 0xFEEF04BD {
-			versionStart = i
-			break
-		}
-	}
-
-	if versionStart == -1 {
-		return fmt.Errorf("version information not found in target file")
-	}
-
-	// 创建新的版本信息块
-	var newVersionInfo bytes.Buffer
-
-	// 写入VS_FIXEDFILEINFO结构
-	fileVersionMS := uint32(0)
-	fileVersionLS := uint32(0)
-	productVersionMS := uint32(0)
-	productVersionLS := uint32(0)
-
-	// 解析版本号字符串
-	fmt.Sscanf(sourceInfo.FileVersion, "%d.%d.%d.%d",
-		&fileVersionMS, &fileVersionLS, &productVersionMS, &productVersionLS)
-
-	fixedInfo := VSFixedFileInfo{
-		Signature:        0xFEEF04BD,
-		StrucVersion:     0x00010000,
-		FileVersionMS:    (fileVersionMS << 16) | fileVersionLS,
-		FileVersionLS:    (productVersionMS << 16) | productVersionLS,
-		ProductVersionMS: (fileVersionMS << 16) | fileVersionLS,
-		ProductVersionLS: (productVersionMS << 16) | productVersionLS,
-		FileFlagsMask:    0x3F,
-		FileFlags:        0,
-		FileOS:           0x40004,
-		FileType:         1,
-		FileSubtype:      0,
-		FileDateMS:       0,
-		FileDateLS:       0,
-	}
-
-	// 写入固定版本信息
-	binary.Write(&newVersionInfo, binary.LittleEndian, fixedInfo)
-
-	// 创建字符串信息表
-	stringPairs := []struct {
-		key   string
-		value string
-	}{
-		{"ProductName", sourceInfo.ProductName},
-		{"FileDescription", sourceInfo.FileDescription},
-		{"CompanyName", sourceInfo.CompanyName},
-		{"LegalCopyright", sourceInfo.LegalCopyright},
-		{"OriginalFilename", sourceInfo.OriginalFilename},
-		{"ProductVersion", sourceInfo.ProductVersion},
-		{"FileVersion", sourceInfo.FileVersion},
-	}
-
-	// 为每个字符串对创建UTF-16编码
-	for _, pair := range stringPairs {
-		keyRunes := utf16.Encode([]rune(pair.key))
-		valueRunes := utf16.Encode([]rune(pair.value))
-
-		// 写入键
-		for _, r := range keyRunes {
-			binary.Write(&newVersionInfo, binary.LittleEndian, r)
-		}
-		// 写入null终止符
-		binary.Write(&newVersionInfo, binary.LittleEndian, uint16(0))
-
-		// 写入值
-		for _, r := range valueRunes {
-			binary.Write(&newVersionInfo, binary.LittleEndian, r)
-		}
-		// 写入null终止符
-		binary.Write(&newVersionInfo, binary.LittleEndian, uint16(0))
-
-		// 4字节对齐
-		padding := make([]byte, (4-(newVersionInfo.Len()%4))%4)
-		newVersionInfo.Write(padding)
-	}
-
-	// 定位到资源节在文件中的位置
-	_, err = targetFile.Seek(int64(rsrcSection.Offset+uint32(versionStart)), io.SeekStart)
-	if err != nil {
-		return fmt.Errorf("failed to seek to version info: %v", err)
-	}
-
-	// 写入新的版本信息
-	_, err = targetFile.Write(newVersionInfo.Bytes())
-	if err != nil {
-		return fmt.Errorf("failed to write new version info: %v", err)
-	}
-
-	return nil
-}
-
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  查看文件信息: program -info <filename>")
-	fmt.Println("  复制文件信息: program -copy <source_file> <target_file>")
 }
 
 func main() {
@@ -325,19 +186,6 @@ func main() {
 		fmt.Printf("产品版本: %s\n", info.ProductVersion)
 		fmt.Printf("文件版本: %s\n", info.FileVersion)
 		fmt.Printf("修改时间: %s\n", info.ModifyTime.Format("2006-01-02 15:04:05"))
-
-	case "-copy":
-		if len(os.Args) != 4 {
-			fmt.Println("错误: -copy 命令需要源文件和目标文件两个参数")
-			printUsage()
-			os.Exit(1)
-		}
-		// 复制文件信息
-		err := copyFileDetails(os.Args[2], os.Args[3])
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println("文件信息复制成功！")
 
 	default:
 		fmt.Printf("错误: 未知的命令 '%s'\n", os.Args[1])
