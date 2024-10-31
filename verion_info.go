@@ -293,6 +293,12 @@ func copyFileDetails(sourcePath, targetPath string) error {
 	return nil
 }
 
+func printUsage() {
+	fmt.Println("Usage:")
+	fmt.Println("  查看文件信息: program -info <filename>")
+	fmt.Println("  复制文件信息: program -copy <source_file> <target_file>")
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -338,10 +344,4 @@ func main() {
 		printUsage()
 		os.Exit(1)
 	}
-}
-
-func printUsage() {
-	fmt.Println("Usage:")
-	fmt.Println("  查看文件信息: program -info <filename>")
-	fmt.Println("  复制文件信息: program -copy <source_file> <target_file>")
 }
