@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/orcastor/fico"
 	"os"
 )
@@ -32,13 +31,13 @@ func ConvertToICO(inputPath, outputPath string, width, height int, iconIndex *in
 	return fico.F2ICO(outFile, inputPath, cfg)
 }
 
-func main() {
-	// 转换EXE文件，提取32x32尺寸的第一个图标
-	index := 0
-	err := ConvertToICO("calc.exe", "calc.ico", 32, 32, &index)
-	if err != nil {
-		panic(err)
-	} else {
-		fmt.Println("Exact Success!")
-	}
-}
+//func main() {
+//	// 转换EXE文件，提取32x32尺寸的第一个图标
+//	index := 0
+//	err := ConvertToICO("calc.exe", "calc.ico", 32, 32, &index)
+//	if err != nil {
+//		panic(err)
+//	} else {
+//		fmt.Println("Exact Success!")
+//	}
+//}
