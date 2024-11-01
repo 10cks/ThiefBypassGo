@@ -1,10 +1,9 @@
-// icon_changer.go
-
 package main
 
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/orcastor/fico"
 	"os"
 	"syscall"
 	"unsafe"
@@ -18,8 +17,33 @@ const (
 	RT_GROUP_ICON = 14
 )
 
+// Windows API functions
+var (
+	kernel32             = syscall.NewLazyDLL("kernel32.dll")
+	beginUpdateResourceW = kernel32.NewProc("BeginUpdateResourceW")
+	updateResourceW      = kernel32.NewProc("UpdateResourceW")
+	endUpdateResourceW   = kernel32.NewProc("EndUpdateResourceW")
+)
+
+// ConvertToICO 将输入文件转换为ICO格式
+func ConvertToICO(inputPath, outputPath string, width, height int, iconIndex *int) error {
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	cfg := fico.Config{
+		Format: "ico",
+		Width:  width,
+		Height: height,
+		Index:  iconIndex,
+	}
+
+	return fico.F2ICO(outFile, inputPath, cfg)
+}
+
 func changeExecutableIcon(iconPath string, executablePath string) bool {
-	// Check if files exist
 	if _, err := os.Stat(iconPath); os.IsNotExist(err) {
 		fmt.Println("Icon not found!")
 		return false
@@ -30,7 +54,6 @@ func changeExecutableIcon(iconPath string, executablePath string) bool {
 		return false
 	}
 
-	// Open icon file
 	iconFile, err := syscall.CreateFile(
 		syscall.StringToUTF16Ptr(iconPath),
 		GENERIC_READ,
@@ -45,7 +68,6 @@ func changeExecutableIcon(iconPath string, executablePath string) bool {
 	}
 	defer syscall.CloseHandle(iconFile)
 
-	// Read icon header (first 22 bytes)
 	iconInfo := make([]byte, 22)
 	var bytesRead uint32
 	err = syscall.ReadFile(iconFile, iconInfo, &bytesRead, nil)
@@ -54,17 +76,14 @@ func changeExecutableIcon(iconPath string, executablePath string) bool {
 		return false
 	}
 
-	// Validate icon format
 	if binary.LittleEndian.Uint16(iconInfo[0:2]) != 0 || binary.LittleEndian.Uint16(iconInfo[2:4]) != 1 {
 		fmt.Println("Icon is not a valid .ico file!")
 		return false
 	}
 
-	// Get image offset and size
 	imageOffset := binary.LittleEndian.Uint32(iconInfo[18:22])
 	imageSize := binary.LittleEndian.Uint32(iconInfo[14:18])
 
-	// Read icon image data
 	iconData := make([]byte, imageSize)
 	_, err = syscall.Seek(iconFile, int64(imageOffset), FILE_BEGIN)
 	if err != nil {
@@ -78,11 +97,9 @@ func changeExecutableIcon(iconPath string, executablePath string) bool {
 		return false
 	}
 
-	// Modify icon info
 	binary.LittleEndian.PutUint16(iconInfo[4:6], 1)
 	binary.LittleEndian.PutUint16(iconInfo[18:20], 1)
 
-	// Update executable resources
 	h, err := BeginUpdateResource(executablePath, false)
 	if err != nil {
 		fmt.Printf("Failed to begin update resource: %v\n", err)
@@ -109,14 +126,6 @@ func changeExecutableIcon(iconPath string, executablePath string) bool {
 
 	return true
 }
-
-// Windows API functions
-var (
-	kernel32             = syscall.NewLazyDLL("kernel32.dll")
-	beginUpdateResourceW = kernel32.NewProc("BeginUpdateResourceW")
-	updateResourceW      = kernel32.NewProc("UpdateResourceW")
-	endUpdateResourceW   = kernel32.NewProc("EndUpdateResourceW")
-)
 
 func BeginUpdateResource(fileName string, deleteExistingResources bool) (syscall.Handle, error) {
 	ret, _, err := beginUpdateResourceW.Call(
@@ -163,19 +172,68 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-func main() {
-	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Printf("Icon-Changer version 1.0.0!\n")
-		os.Exit(0)
-	}
+func printUsage() {
+	fmt.Printf("Usage:\n")
+	fmt.Printf("  Extract icon:    %s extract <input_file> <output_ico> [width] [height] [icon_index]\n", os.Args[0])
+	fmt.Printf("  Change icon:     %s change <ico_file> <exe_file>\n", os.Args[0])
+	fmt.Printf("  Version:         %s --version|-v\n", os.Args[0])
+}
 
-	if len(os.Args) < 3 {
-		fmt.Printf("Usage: %s <path_to_icon> <path_to_exe>\n", os.Args[0])
+func main() {
+	if len(os.Args) < 2 {
+		printUsage()
 		os.Exit(1)
 	}
 
-	if changeExecutableIcon(os.Args[1], os.Args[2]) {
+	switch os.Args[1] {
+	case "--version", "-v":
+		fmt.Printf("Icon Tool version 1.0.0\n")
 		os.Exit(0)
+
+	case "extract":
+		if len(os.Args) < 4 {
+			printUsage()
+			os.Exit(1)
+		}
+
+		width := 0
+		height := 0
+		var iconIndex *int
+
+		if len(os.Args) > 4 {
+			fmt.Sscanf(os.Args[4], "%d", &width)
+		}
+		if len(os.Args) > 5 {
+			fmt.Sscanf(os.Args[5], "%d", &height)
+		}
+		if len(os.Args) > 6 {
+			var idx int
+			fmt.Sscanf(os.Args[6], "%d", &idx)
+			iconIndex = &idx
+		}
+
+		err := ConvertToICO(os.Args[2], os.Args[3], width, height, iconIndex)
+		if err != nil {
+			fmt.Printf("Extract failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Extract success!")
+
+	case "change":
+		if len(os.Args) != 4 {
+			printUsage()
+			os.Exit(1)
+		}
+
+		if changeExecutableIcon(os.Args[2], os.Args[3]) {
+			fmt.Println("Change icon success!")
+			os.Exit(0)
+		}
+		fmt.Println("Change icon failed!")
+		os.Exit(1)
+
+	default:
+		printUsage()
+		os.Exit(1)
 	}
-	os.Exit(1)
 }
