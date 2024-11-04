@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"github.com/orcastor/fico"
 	"os"
@@ -17,7 +18,6 @@ const (
 	RT_GROUP_ICON = 14
 )
 
-// Windows API functions
 var (
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
 	beginUpdateResourceW = kernel32.NewProc("BeginUpdateResourceW")
@@ -25,7 +25,19 @@ var (
 	endUpdateResourceW   = kernel32.NewProc("EndUpdateResourceW")
 )
 
-// ConvertToICO 将输入文件转换为ICO格式
+type commandFlags struct {
+	version    bool
+	mode       string
+	inputFile  string
+	outputFile string
+	width      int
+	height     int
+	iconIndex  int
+	useIndex   bool
+	iconFile   string
+	exeFile    string
+}
+
 func ConvertToICO(inputPath, outputPath string, width, height int, iconIndex *int) error {
 	outFile, err := os.Create(outputPath)
 	if err != nil {
@@ -172,60 +184,56 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-func printUsage() {
-	fmt.Printf("Usage:\n")
-	fmt.Printf("  Extract icon:    %s extract <input_file> <output_ico> [width] [height] [icon_index]\n", os.Args[0])
-	fmt.Printf("  Change icon:     %s change <ico_file> <exe_file>\n", os.Args[0])
-	fmt.Printf("  Version:         %s --version|-v\n", os.Args[0])
-}
-
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
+	flags := commandFlags{}
 
-	switch os.Args[1] {
-	case "--version", "-v":
+	// 设置通用标志
+	flag.StringVar(&flags.mode, "mode", "", "操作模式: extract 或 change")
+	flag.BoolVar(&flags.version, "version", false, "显示版本信息")
+	flag.BoolVar(&flags.version, "v", false, "显示版本信息（简写）")
+
+	// extract 模式的标志
+	flag.StringVar(&flags.inputFile, "input", "", "输入文件路径")
+	flag.StringVar(&flags.outputFile, "output", "", "输出ICO文件路径")
+	flag.IntVar(&flags.width, "width", 0, "图标宽度")
+	flag.IntVar(&flags.height, "height", 0, "图标高度")
+	flag.IntVar(&flags.iconIndex, "index", 0, "图标索引")
+	flag.BoolVar(&flags.useIndex, "use-index", false, "是否使用图标索引")
+
+	// change 模式的标志
+	flag.StringVar(&flags.iconFile, "icon", "", "ICO文件路径")
+	flag.StringVar(&flags.exeFile, "exe", "", "可执行文件路径")
+
+	flag.Parse()
+
+	if flags.version {
 		fmt.Printf("Icon Tool version 1.0.0\n")
 		os.Exit(0)
+	}
 
-	case "extract":
-		if len(os.Args) < 4 {
-			printUsage()
+	switch flags.mode {
+	case "icon-extract":
+		if flags.inputFile == "" || flags.outputFile == "" {
+			fmt.Println("Usage: program -mode extract -input <input_file> -output <output_ico> [-width width] [-height height] [-index icon_index]")
 			os.Exit(1)
 		}
-
-		width := 0
-		height := 0
 		var iconIndex *int
-
-		if len(os.Args) > 4 {
-			fmt.Sscanf(os.Args[4], "%d", &width)
+		if flags.useIndex {
+			iconIndex = &flags.iconIndex
 		}
-		if len(os.Args) > 5 {
-			fmt.Sscanf(os.Args[5], "%d", &height)
-		}
-		if len(os.Args) > 6 {
-			var idx int
-			fmt.Sscanf(os.Args[6], "%d", &idx)
-			iconIndex = &idx
-		}
-
-		err := ConvertToICO(os.Args[2], os.Args[3], width, height, iconIndex)
+		err := ConvertToICO(flags.inputFile, flags.outputFile, flags.width, flags.height, iconIndex)
 		if err != nil {
 			fmt.Printf("Extract failed: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("Extract success!")
 
-	case "change":
-		if len(os.Args) != 4 {
-			printUsage()
+	case "icon-change":
+		if flags.iconFile == "" || flags.exeFile == "" {
+			fmt.Println("Usage: program -mode change -icon <ico_file> -exe <exe_file>")
 			os.Exit(1)
 		}
-
-		if changeExecutableIcon(os.Args[2], os.Args[3]) {
+		if changeExecutableIcon(flags.iconFile, flags.exeFile) {
 			fmt.Println("Change icon success!")
 			os.Exit(0)
 		}
@@ -233,7 +241,10 @@ func main() {
 		os.Exit(1)
 
 	default:
-		printUsage()
+		fmt.Println("Usage:")
+		fmt.Println("  Extract: program -mode icon-extract -input <input_file> -output <output_ico> [-width width] [-height height] [-index icon_index]")
+		fmt.Println("  Change:  program -mode icon-change -icon <ico_file> -exe <exe_file>")
+		fmt.Println("  Version: program -version|-v")
 		os.Exit(1)
 	}
 }

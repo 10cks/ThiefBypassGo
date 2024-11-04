@@ -238,8 +238,8 @@ func ExtractResourceToFile(peFile string, outFile string, resType uint16, resNam
 
 func printUsage() {
 	fmt.Println("\nExample:")
-	fmt.Println("  program -mode add 		-input app.exe -output icon.ico -type 3 -id 1 -lang 0")
-	fmt.Println("  program -mode extract 	-input app.exe -output icon.ico -type 3 -id 1 -lang 0")
+	fmt.Println("  program -mode res-add 		-input app.exe -output icon.ico -type 3 -id 1 -lang 0")
+	fmt.Println("  program -mode res-extract 	-input app.exe -output icon.ico -type 3 -id 1 -lang 0")
 }
 
 func main() {
@@ -259,7 +259,7 @@ func main() {
 
 	// 执行相应的操作
 	switch cmd.mode {
-	case "add":
+	case "res-add":
 		err = AddResourceFromFile(cmd.input, cmd.output, cmd.resourceType, cmd.resourceID, cmd.languageID)
 		if err != nil {
 			fmt.Printf("Failed to add resource: %v\n", err)
@@ -267,7 +267,7 @@ func main() {
 		}
 		fmt.Println("Resource added successfully")
 
-	case "extract":
+	case "res-extract":
 		err = ExtractResourceToFile(cmd.input, cmd.output, cmd.resourceType, cmd.resourceID, cmd.languageID)
 		if err != nil {
 			fmt.Printf("Failed to extract resource: %v\n", err)
