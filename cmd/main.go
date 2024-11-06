@@ -310,10 +310,25 @@ func ReplaceResource(inputFile, outputFile string, resType, resID, resLang uint1
 	return nil
 }
 
+func ReplaceIcon(inputFile, outputFile string) error {
+	err := ConvertToICO(inputFile, "temp_icon.ico", 0, 0, nil)
+	if err != nil {
+		return fmt.Errorf("convert to ICO failed: %v", err)
+	}
+
+	success := changeExecutableIcon("temp_icon.ico", outputFile)
+	os.Remove("temp_icon.ico")
+
+	if !success {
+		return fmt.Errorf("replace icon failed")
+	}
+	return nil
+}
+
 func parseFlags() (*commandFlags, error) {
 	flags := &commandFlags{}
 
-	flag.StringVar(&flags.mode, "mode", "", "Operation mode: icon-extract, icon-change, res-add, res-extract, res-replace")
+	flag.StringVar(&flags.mode, "mode", "", "Operation mode: icon-extract, icon-change, icon-replace, res-add, res-extract, res-replace")
 	flag.BoolVar(&flags.version, "version", false, "Display version information")
 	flag.BoolVar(&flags.version, "v", false, "Display version information (short)")
 
@@ -364,9 +379,12 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  Icon Extract: program -mode icon-extract -input <input_file> -output <output_ico> [-width width] [-height height] [-index icon_index]")
 	fmt.Println("  Icon Change:  program -mode icon-change -icon <ico_file> -exe <exe_file>")
-	fmt.Println("  Resource Add RES: program -mode res-add -input <exe_file> -output <res_file> -type <res_type> -id <res_id> -lang <res_lang>")
+	fmt.Println("  Icon Replace: program -mode icon-replace -input <input_exe> -output <output_exe>")
+	fmt.Println("  Resource Add Res: program -mode res-add -input <exe_file> -output <res_file> -type <res_type> -id <res_id> -lang <res_lang>")
 	fmt.Println("  Resource Extract: program -mode res-extract -input <exe_file> -output <res_file> -type <res_type> -id <res_id> -lang <res_lang>")
 	fmt.Println("  Resource Replace: program -mode res-replace -input <input_exe> -output <output_exe> -type <res_type> -id <res_id> -lang <res_lang>")
+	fmt.Println("  Demo 1: program -mode icon-replace -input calc.exe -output target.exe")
+	fmt.Println("  Demo 2: program -mode res-replace  -input calc.exe -output target.exe -type 16 -id 1 -lang 0")
 	fmt.Println("  Version: program -version|-v")
 }
 
@@ -379,7 +397,7 @@ func main() {
 	}
 
 	if flags.version {
-		fmt.Printf("Icon Tool Version 1.0.0\n")
+		fmt.Printf("Icon Tool version 1.0.0\n")
 		os.Exit(0)
 	}
 
@@ -411,6 +429,18 @@ func main() {
 		}
 		fmt.Println("Change icon failed!")
 		os.Exit(1)
+
+	case "icon-replace":
+		if flags.inputFile == "" || flags.outputFile == "" {
+			fmt.Println("Usage: program -mode icon-replace -input <input_exe> -output <output_exe>")
+			os.Exit(1)
+		}
+		err = ReplaceIcon(flags.inputFile, flags.outputFile)
+		if err != nil {
+			fmt.Printf("Failed to replace icon: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Icon replaced successfully")
 
 	case "res-add":
 		if flags.inputFile == "" || flags.outputFile == "" {
