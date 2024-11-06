@@ -397,7 +397,7 @@ func main() {
 	}
 
 	if flags.version {
-		fmt.Printf("Icon Tool version 1.0.0\n")
+		fmt.Printf("ThiefBypassGo Version 1.0.0\n")
 		os.Exit(0)
 	}
 
